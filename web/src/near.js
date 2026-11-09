@@ -1,7 +1,6 @@
 // NEAR helpers: amount math (string/BigInt only, no floats), RPC views, wallet calls.
 import { setupWalletSelector, internalActionToNaj } from "@near-wallet-selector/core";
 import { setupModal } from "@near-wallet-selector/modal-ui";
-import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
@@ -94,7 +93,7 @@ let selector, modal;
 export async function initWallet() {
   selector = await setupWalletSelector({
     network: "testnet",
-    modules: [setupMyNearWallet(), setupMeteorWallet(), setupIntearWallet()],
+    modules: [setupMeteorWallet(), setupIntearWallet()],
   });
   modal = setupModal(selector, { contractId: CONTRACT_ID });
   return selector;

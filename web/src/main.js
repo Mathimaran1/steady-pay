@@ -375,7 +375,7 @@ async function refresh() {
 }
 
 function handleRedirectReturn() {
-  // Redirect wallets (MyNearWallet) come back with ?transactionHashes=... or ?errorCode=...
+  // Redirect-style wallets come back with ?transactionHashes=... or ?errorCode=...
   const q = new URLSearchParams(location.search);
   const label = sessionStorage.getItem("steadypay.pending") || "Transaction";
   sessionStorage.removeItem("steadypay.pending");

@@ -13,7 +13,7 @@
 ```
 
 - **Contract** (`contract/src/lib.rs`, near-sdk 5): one contract holds many vaults, one per owner account. It is the only source of truth.
-- **Web page** (`web/`): static Vite site, no backend, no database. Reads with plain `fetch` to the testnet RPC (`query` / `call_function`), writes through NEAR Wallet Selector (MyNearWallet, Meteor, Intear).
+- **Web page** (`web/`): static Vite site, no backend, no database. Reads with plain `fetch` to the testnet RPC (`query` / `call_function`), writes through NEAR Wallet Selector (Meteor, Intear; MyNearWallet was dropped because it no longer accepts app connections).
 
 ## Vault state
 
