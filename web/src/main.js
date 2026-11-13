@@ -595,14 +595,12 @@ function payPage(owner, v, coin, balance) {
     <div class="page-head">
       <p class="eyebrow">Pay link · ${sym}</p>
       <h1>Pay <span class="h1-acct">${esc(owner)}</span></h1>
-      <p>Your payment goes into their Steady Pay vault on NEAR testnet, in ${sym}.
-        ${v.tax_percent}% is set aside as their savings and the rest ${v.instant ? "goes straight to their wallet" : "funds their salary"}.</p>
+      <p>Pay in ${sym} on NEAR testnet. Your payment goes straight into their Steady Pay vault.</p>
     </div>
     <form id="payForm" class="panel">
       <label>Amount (${sym})<input name="amount" inputmode="decimal" required placeholder="10"></label>
       ${coin.token && me ? `<p class="muted small balance-line">Your balance: <span class="mono">${balance == null ? "0" : fromUnits(balance, coin.decimals, coin.dp)} ${sym}</span>
         ${canMint ? `<button type="button" id="mint" class="ghost small">Get 100 test ${sym}</button>` : ""}</p>` : ""}
-      <div id="split" class="preview"></div>
       ${me ? `<button class="primary big block" type="submit">Pay ${esc(owner)}</button>`
            : `<button class="primary big block" type="button" id="signin3">Connect wallet to pay</button>`}
     </form>
@@ -614,15 +612,6 @@ function bindPay(owner, v, coin) {
   $("#signin3")?.addEventListener("click", signIn);
   $("#mint")?.addEventListener("click", (e) => act(e.currentTarget, `Get test ${coin.symbol}`, () => mintTestTokens(coin.token, me, toUnits("100", coin.decimals))));
   const f = $("#payForm");
-  const fmt = (x) => fromUnits(x, coin.decimals, coin.dp);
-  const upd = () => {
-    try {
-      const a = big(toUnits(f.amount.value || "0", coin.decimals));
-      const t = (a * BigInt(v.tax_percent)) / 100n;
-      $("#split").innerHTML = a > 0n ? `<b>${fmt(a - t)} ${coin.symbol}</b> ${v.instant ? "straight to their wallet" : "to their salary pot"}, <b>${fmt(t)} ${coin.symbol}</b> locked as savings.` : "";
-    } catch { $("#split").textContent = ""; }
-  };
-  f.amount.oninput = upd;
   f.onsubmit = async (ev) => {
     ev.preventDefault();
     let amt;
