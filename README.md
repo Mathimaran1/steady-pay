@@ -196,7 +196,3 @@ npm run dev             # or: npm run build -> dist/
 - Tax percent is applied with integer math and rounds down by up to 1 yoctoNEAR per payment (in the salary pot's favour); no money is lost.
 - Paydays are based on block time, so a claim can be a few seconds later than the countdown.
 - "Recent activity" on the dashboard is stored in your browser only.
-
-## License
-
-MIT
