@@ -13,7 +13,8 @@
     "@near-wallet-selector/intear-wallet": "10.1.4",
     "@near-wallet-selector/meteor-wallet": "10.1.4",
     "@near-wallet-selector/modal-ui": "10.1.4",
-    "buffer": "6.0.3"
+    "buffer": "6.0.3",
+    "three": "0.170.0"
   },
   "devDependencies": {
     "vite": "8.3.5"
