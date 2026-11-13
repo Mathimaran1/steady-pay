@@ -23,7 +23,7 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 
 | | |
 |---|---|
-| Live page | TODO |
+| Live page | https://steady-pay-pi.vercel.app (Vercel, NEAR testnet) |
 | Contract (testnet) | [`sp11091716-vault.testnet`](https://testnet.nearblocks.io/address/sp11091716-vault.testnet) |
 | Demo video | TODO |
 | X post | TODO |
@@ -42,11 +42,10 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 - Deployed on NEAR testnet at `sp11091716-vault.testnet`; full flow verified from the CLI (hashes below).
 - USDC vaults: deployed to the same account on 13 Nov 2026 and verified from the CLI with testnet USDC `usdc.fakes.testnet` (hashes below). Vaults made before that keep working as NEAR vaults.
 - USDT: offered in the setup dropdown; the vault account and demo savings wallet are registered with `usdt.fakes.testnet`. It uses the same contract code path as USDC, but a full USDT run (pay, claim, move savings) has not been verified yet.
-- Web page (`web/`): builds with `npm run build`; reads live vault data from testnet (pay page shows the real split). Signing in with a wallet works (Meteor, testnet). From the page, by hand on 14 Nov 2026: creating a NEAR vault with a savings date lock and claiming salary both worked. Not yet tested by hand from the page: releasing savings, paying through a pay link, and the USDC/USDT flow (register with token, get test tokens, pay, claim).
+- Web page (`web/`): builds with `npm run build`; reads live vault data from testnet (pay page shows the real split). Signing in with a wallet works (Meteor, testnet). From the page, by hand on 14 Nov 2026: creating a NEAR vault with a savings date lock, claiming salary and releasing savings all worked. Not yet tested by hand from the page: paying through a pay link, and the USDC/USDT flow (register with token, get test tokens, pay, claim); those contract paths are verified from the CLI (hashes below).
 
 ### Not done yet
-- Wallet sign-in + transactions from the web page, tested by a human — TODO
-- Hosted web page — TODO
+- Hand test from the page of paying through a pay link and of USDC/USDT vaults — TODO
 - Demo video, X post — TODO
 
 ## How it works
@@ -195,4 +194,4 @@ npm run dev             # or: npm run build -> dist/
 - The contract accepts any NEP-141 token the owner names at setup; it does not check that the token is genuine. The page only offers testnet USDC and USDT (`usdc.fakes.testnet`, `usdt.fakes.testnet`: test tokens with public minting, not Circle's USDC or Tether's USDT).
 - Tax percent is applied with integer math and rounds down by up to 1 yoctoNEAR per payment (in the salary pot's favour); no money is lost.
 - Paydays are based on block time, so a claim can be a few seconds later than the countdown.
-- "Recent activity" on the dashboard is stored in your browser only.
+- The Activity page reads your history from the NearBlocks indexer and lists only transactions you signed; payments clients send you are counted in the Wallet page totals instead.
