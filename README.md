@@ -44,11 +44,12 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 - Deployed on NEAR testnet at `sp11091716-vault.testnet`; full flow verified from the CLI (hashes below).
 - USDC vaults: deployed to the same account on 13 Nov 2026 and verified from the CLI with testnet USDC `usdc.fakes.testnet` (hashes below). Vaults made before that keep working as NEAR vaults.
 - USDT: offered in the setup dropdown; the vault account and demo savings wallet are registered with `usdt.fakes.testnet`. It uses the same contract code path as USDC, but a full USDT run (pay, claim, move savings) has not been verified yet.
-- Web page (`web/`): builds with `npm run build`; reads live vault data from testnet. The pay page shows the client only the coin and the payee, not the payee's savings split (it is still public on chain). Signing in with a wallet works (Meteor, testnet). From the page, by hand on 14 Nov 2026: creating a NEAR vault with a savings date lock, claiming salary and releasing savings all worked. Not yet tested by hand from the page: paying through a pay link, and the USDC/USDT flow (register with token, get test tokens, pay, claim); those contract paths are verified from the CLI (hashes below).
+- Web page (`web/`): builds with `npm run build`; reads live vault data from testnet. The pay page shows the client only the coin and the payee, not the payee's savings split (it is still public on chain). Signing in with a wallet works (Meteor extension, testnet). The full flow was run by hand from the live page on 14 Nov 2026 and filmed for the demo video (hashes in "Web page run" below): connect wallet, create a NEAR vault with a savings date lock, a client pays 2 NEAR through the pay link, a client pays 1 USDC through the pay link, one claim pays 7 missed paydays (1.4 NEAR), raising the salary is blocked, lowering it works, and savings come back with the demo yield.
 
 ### Not done yet
-- Hand test from the page of paying through a pay link and of USDC/USDT vaults — TODO
-- Demo video, X post — TODO
+- USDC/USDT *vaults* (paid in a token as the main coin) have not been run by hand from the page; their contract paths are verified from the CLI (hashes below). USDT payments from the page are not hand-tested.
+- The pay-page fix that registers the payee with the token in the same transaction (commit `0dcbcc6`, see Known limits) builds but has not been hand-tested yet — TODO
+- Demo video link, X post — TODO
 
 ## How it works
 
@@ -178,6 +179,20 @@ Other coins, run on 14 Nov 2026 (NEAR vault `slowos1008.testnet`, 30% savings):
 | client pays 10 USDC to the NEAR vault | ok: 7 USDC sent to the owner (100 → 107), 3 USDC locked; NEAR books unchanged | [B29zKLjw…](https://testnet.nearblocks.io/txns/B29zKLjwgQoufdUMqFLQu96VafS5DFMAiF82ENG9APPr) |
 | client pays 0.1 NEAR to a USDT vault | ok: 0.07 NEAR to the owner, 0.03 locked in its NEAR pocket | [21CHyU5F…](https://testnet.nearblocks.io/txns/21CHyU5Fu8up28BwkYoEZctRTk8BU1qGMThdTR4evsZM) |
 
+Web page run, by hand from https://steady-pay-pi.vercel.app on 14 Nov 2026 (filmed for the demo video). Freelancer `client_steady.testnet`: NEAR vault, 0.2 NEAR salary every 60 s, 30% savings locked for 5 minutes. Client `slowos1008.testnet`.
+
+| Step | Result | Transaction |
+|---|---|---|
+| `create_vault` from the setup page | ok | [8zYh6iXq…](https://testnet.nearblocks.io/txns/8zYh6iXqar94ydPtyn5Je31AxRWo1nX8fJdqy4D8aNG3) |
+| client pays 2 NEAR through the pay link | ok → 0.6 savings, 1.4 salary pot (7 paydays) | [6XopCqUB…](https://testnet.nearblocks.io/txns/6XopCqUBCZAmD6v2ZtRZA54TF5TBxc3YNyrpWmcxEhov) |
+| client gets 100 test USDC ("Get 100 test USDC" button) | ok | [FM5kCGj1…](https://testnet.nearblocks.io/txns/FM5kCGj1TAh9P5Fywb36tZNNfutj3QgqA3gWDyv4QJiQ) |
+| client pays 1 USDC through the pay link | payment ok: 0.3 USDC locked as savings; forwarding the other 0.7 failed because the freelancer was not registered with USDC, so it stayed in the vault's USDC pocket (log `payout_failed`). The wallet showed this as an error; fixed in the page afterwards (see Known limits) | [CdjCfw3k…](https://testnet.nearblocks.io/txns/CdjCfw3kb6R9CNtiBHbKAZTAZs2qY1iM9sPdEsUMNcFE) |
+| `claim_salary` after several paydays | ok, 7 paydays paid at once (1.4 NEAR) | [DG1nGDNq…](https://testnet.nearblocks.io/txns/DG1nGDNqHtEoDKRk3LaqfPAnaWc6fP8CwKW1SHMzUemj) |
+| `claim_salary` again straight away | fails: "It is not payday yet" | [DCAhEQd8…](https://testnet.nearblocks.io/txns/DCAhEQd8omisMUAmqMpkfcTkCQQUDAbLr1wci5hzbc9) |
+| `lower_salary` to 1 (a raise) | fails: "Salary can only go down, never up" | [5f4KJHQE…](https://testnet.nearblocks.io/txns/5f4KJHQEPQqkZcxfxyWbWU2h7zoTitoMsW1kz355yaA1) |
+| `lower_salary` to 0.1 | ok | [EY8fNdB2…](https://testnet.nearblocks.io/txns/EY8fNdB2vjo4BoZdB8nazYm5pUG5XQEeZze6uxTBsPNP) |
+| `withdraw_tax` ("Release savings") after the unlock | ok: 0.6 NEAR savings + 0.000000745 NEAR demo yield back to the owner | [Bzv34G1U…](https://testnet.nearblocks.io/txns/Bzv34G1UD8a1S916TUDLKTZdHuMiVaPebCsyGTr2o6Qr) |
+
 On-chain messages: every payout carries a readable message. Token payouts put it in the `ft_transfer` memo; plain NEAR transfers have no memo field, so the contract writes it as a log line on the transaction.
 
 Run it yourself against any deployment: `scripts/walkthrough.sh <contract> <freelancer> <client> <tax_wallet>` (accounts must be in `~/.near-credentials`).
@@ -202,6 +217,7 @@ npm run dev             # or: npm run build -> dist/
 - There is no way to close a vault or change the tax wallet / period / tax percent after setup.
 - 0.01 NEAR of the setup deposit is kept by the contract for storage and is not returned.
 - Each vault has one main coin, fixed at setup. Payments in other coins skip the salary pot and demo yield: only the savings share is kept (in a per-coin pocket), the rest is forwarded immediately.
+- Paying in a token to someone not registered with that token: the vault keeps the savings share and tries to forward the rest; if the payee isn't registered, the forward fails and the money waits in the vault's pocket for that coin (the Release / Collect button under "Other coins" on the dashboard, once registered). Since commit `0dcbcc6` the pay page registers the payee in the same transaction (the client pays the ~0.00125 NEAR storage fee) so this no longer happens from the page; other wallets or scripts can still hit it.
 - Token vaults pay out only to accounts registered with the token. If the owner or tax wallet isn't registered, the transfer fails and the money stays in the vault (rolled back); the page shows a "register" step.
 - The contract accepts any NEP-141 token the owner names at setup; it does not check that the token is genuine. The page only offers testnet USDC and USDT (`usdc.fakes.testnet`, `usdt.fakes.testnet`: test tokens with public minting, not Circle's USDC or Tether's USDT).
 - Tax percent is applied with integer math and rounds down by up to 1 yoctoNEAR per payment (in the salary pot's favour); no money is lost.
