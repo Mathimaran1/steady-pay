@@ -114,6 +114,9 @@ export async function getVault(owner) {
   return v;
 }
 
+/** Extra-coin pockets of a vault: payments in coins other than its main coin. */
+export const getPockets = (owner) => view("get_pockets", { owner });
+
 /** The last vault view this browser saw for `owner`, or undefined. Only for showing something while fresh data loads. */
 export function cachedVault(owner) {
   try {

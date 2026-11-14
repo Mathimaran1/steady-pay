@@ -266,7 +266,8 @@ export function createScene(canvas, { particles = DEFAULT_PARTICLES } = {}) {
     camera.position.z = w / h < 0.8 ? 14 : 9;
     // on wide screens: bigger, and to the right of the big title
     points.scale.setScalar(fixedScale !== null ? (wide ? fixedScale : 0.8) : wide ? 1.3 : 1);
-    points.position.set(sideX(storyC), wide ? (fixedY ?? 0.25) : 0.35, 0);
+    // phones: lift the scene into the top half so it sits above the chapter text
+    points.position.set(sideX(storyC), wide ? (fixedY ?? 0.25) : (w / h < 0.8 ? 1.5 : 0.35), 0);
     camera.updateProjectionMatrix();
     mat.uniforms.uPixel.value = h * dpr * 0.045;
   }

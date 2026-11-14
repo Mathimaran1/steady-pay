@@ -120,6 +120,15 @@ pub enum Payout {
     TaxWithYield {
         yield_amount: U128,
     },
+    /// A payment in another coin forwarded to the owner (failure: it waits in the pocket).
+    SideForward {
+        coin: Option<AccountId>,
+    },
+    /// A pocket release: `savings` of it came from locked savings, the rest was waiting.
+    SideRelease {
+        coin: Option<AccountId>,
+        savings: U128,
+    },
 }
 
 #[near(contract_state)]
@@ -237,6 +246,96 @@ fn read_reserve() -> u128 {
 
 fn write_reserve(v: u128) {
     env::storage_write(RESERVE_KEY, &v.to_le_bytes());
+}
+
+// ---------- other coins ----------
+// A vault is set up in one main coin, but clients may pay in any coin (NEAR or a NEP-141 token).
+// A payment in another coin is split the same way: the savings share is locked in a separate
+// "pocket" for that coin until the vault's unlock date, and the rest is sent straight to the owner.
+// If that send fails (e.g. the owner isn't registered with the token), it waits in the pocket.
+
+const SIDE_KEY_PREFIX: &[u8] = b"sid:";
+const SIDE_LIST_PREFIX: &[u8] = b"scn:";
+const NEAR_COIN_ID: &str = "near";
+
+/// One coin pocket of a vault: locked savings, money waiting to be collected, and totals.
+#[derive(Default)]
+struct Pocket {
+    savings: u128,
+    waiting: u128,
+    received: u128,
+    paid_out: u128,
+}
+
+fn coin_id(coin: &Option<AccountId>) -> String {
+    coin.as_ref()
+        .map_or(NEAR_COIN_ID.to_string(), |t| t.to_string())
+}
+
+fn side_key(owner: &AccountId, coin: &str) -> Vec<u8> {
+    [SIDE_KEY_PREFIX, owner.as_bytes(), b":", coin.as_bytes()].concat()
+}
+
+fn read_pocket(owner: &AccountId, coin: &str) -> Pocket {
+    match env::storage_read(&side_key(owner, coin)) {
+        Some(b) if b.len() == 64 => {
+            let n = |i: usize| u128::from_le_bytes(b[i * 16..i * 16 + 16].try_into().unwrap());
+            Pocket {
+                savings: n(0),
+                waiting: n(1),
+                received: n(2),
+                paid_out: n(3),
+            }
+        }
+        _ => Pocket::default(),
+    }
+}
+
+fn write_pocket(owner: &AccountId, coin: &str, p: &Pocket) {
+    let mut b = Vec::with_capacity(64);
+    for v in [p.savings, p.waiting, p.received, p.paid_out] {
+        b.extend_from_slice(&v.to_le_bytes());
+    }
+    env::storage_write(&side_key(owner, coin), &b);
+    // remember which coins this vault has pockets for
+    let list_key = [SIDE_LIST_PREFIX, owner.as_bytes()].concat();
+    let mut list = side_coins(owner);
+    if !list.iter().any(|c| c == coin) {
+        list.push(coin.to_string());
+        env::storage_write(&list_key, list.join(",").as_bytes());
+    }
+}
+
+fn side_coins(owner: &AccountId) -> Vec<String> {
+    env::storage_read(&[SIDE_LIST_PREFIX, owner.as_bytes()].concat())
+        .and_then(|b| String::from_utf8(b).ok())
+        .map(|s| {
+            s.split(',')
+                .filter(|c| !c.is_empty())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn coin_from_id(id: &str) -> Option<AccountId> {
+    if id == NEAR_COIN_ID {
+        None
+    } else {
+        Some(id.parse().unwrap_or_else(|_| env::panic_str("Bad coin")))
+    }
+}
+
+/// JSON view of one extra-coin pocket.
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PocketView {
+    /// Token contract, or null for NEAR.
+    pub coin: Option<AccountId>,
+    pub savings: U128,
+    pub waiting: U128,
+    pub received: U128,
+    pub paid_out: U128,
 }
 
 /// Storage key marking an "instant" vault: the non-savings share of each payment goes straight
@@ -414,10 +513,11 @@ impl SteadyPay {
             self.vaults.contains_key(&owner),
             "No vault found for this account"
         );
-        if let Some(t) = token_of(&owner) {
-            env::panic_str(&format!("This vault is paid in {}, not NEAR", t));
+        if token_of(&owner).is_some() {
+            self.credit_side(&owner, None, amount, &env::predecessor_account_id());
+        } else {
+            self.credit(&owner, amount, &env::predecessor_account_id());
         }
-        self.credit(&owner, amount, &env::predecessor_account_id());
         self.view_of(&owner).unwrap()
     }
 
@@ -440,11 +540,11 @@ impl SteadyPay {
             self.vaults.contains_key(&owner),
             "No vault found for this account"
         );
-        require!(
-            token_of(&owner).as_ref() == Some(&token),
-            "This vault does not accept this token"
-        );
-        self.credit(&owner, amount.0, &sender_id);
+        if token_of(&owner).as_ref() == Some(&token) {
+            self.credit(&owner, amount.0, &sender_id);
+        } else {
+            self.credit_side(&owner, Some(token), amount.0, &sender_id);
+        }
         PromiseOrValue::Value(U128(0))
     }
 
@@ -619,6 +719,21 @@ impl SteadyPay {
                     vault.tax_bucket += amount.0;
                     vault.total_tax_withdrawn -= amount.0;
                 }
+                Payout::SideForward { coin } => {
+                    let id = coin_id(&coin);
+                    let mut p = read_pocket(&owner, &id);
+                    p.waiting += amount.0;
+                    p.paid_out -= amount.0;
+                    write_pocket(&owner, &id, &p);
+                }
+                Payout::SideRelease { coin, savings } => {
+                    let id = coin_id(&coin);
+                    let mut p = read_pocket(&owner, &id);
+                    p.savings += savings.0;
+                    p.waiting += amount.0 - savings.0;
+                    p.paid_out -= amount.0;
+                    write_pocket(&owner, &id, &p);
+                }
                 Payout::TaxWithYield { yield_amount } => {
                     let savings = amount.0 - yield_amount.0;
                     vault.tax_bucket += savings;
@@ -646,6 +761,74 @@ impl SteadyPay {
 
     pub fn get_vault_count(&self) -> u64 {
         self.vault_count
+    }
+
+    /// Collect an extra-coin pocket: whatever is waiting, plus the locked savings once the
+    /// vault's unlock date has passed. `coin` is the token contract, or null for NEAR.
+    pub fn release_pocket(&mut self, coin: Option<AccountId>) -> Promise {
+        let owner = env::predecessor_account_id();
+        let vault = self
+            .vaults
+            .get(&owner)
+            .unwrap_or_else(|| env::panic_str("No vault found for this account"));
+        let unlocked = unlock_of(&owner).map_or(true, |u| env::block_timestamp_ms() >= u);
+        let id = coin_id(&coin);
+        let mut p = read_pocket(&owner, &id);
+        let savings = if unlocked { p.savings } else { 0 };
+        let total = savings + p.waiting;
+        require!(
+            total > 0,
+            if p.savings > 0 {
+                "Your savings are locked until the unlock date"
+            } else {
+                "There is nothing to collect in this coin"
+            }
+        );
+        p.savings -= savings;
+        p.waiting = 0;
+        p.paid_out += total;
+        write_pocket(&owner, &id, &p);
+        let to = if savings > 0 {
+            vault.tax_wallet.clone()
+        } else {
+            owner.clone()
+        };
+        log_event(
+            "release_pocket",
+            format!(
+                "{{\"owner\":\"{}\",\"coin\":\"{}\",\"amount\":\"{}\"}}",
+                owner, id, total
+            ),
+        );
+        send(to, total, coin.clone(), "Steady Pay savings released").then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(CALLBACK_GAS)
+                .on_payout(
+                    owner,
+                    U128(total),
+                    Payout::SideRelease {
+                        coin,
+                        savings: U128(savings),
+                    },
+                ),
+        )
+    }
+
+    /// The vault's extra-coin pockets (payments in coins other than its main coin).
+    pub fn get_pockets(&self, owner: AccountId) -> Vec<PocketView> {
+        side_coins(&owner)
+            .iter()
+            .map(|id| {
+                let p = read_pocket(&owner, id);
+                PocketView {
+                    coin: coin_from_id(id),
+                    savings: U128(p.savings),
+                    waiting: U128(p.waiting),
+                    received: U128(p.received),
+                    paid_out: U128(p.paid_out),
+                }
+            })
+            .collect()
     }
 
     /// Top up the demo yield reserve with the attached NEAR. Anyone can call it.
@@ -683,6 +866,40 @@ impl SteadyPay {
 
 impl SteadyPay {
     /// Split a payment into tax bucket and salary pot. The vault must exist.
+    /// A payment in a coin other than the vault's main coin: savings share locked in that coin's
+    /// pocket, the rest forwarded to the owner straight away.
+    fn credit_side(
+        &mut self,
+        owner: &AccountId,
+        coin: Option<AccountId>,
+        amount: u128,
+        from: &AccountId,
+    ) {
+        let vault = self.vaults.get(owner).unwrap();
+        let to_tax = amount * vault.tax_percent as u128 / 100;
+        let rest = amount - to_tax;
+        let id = coin_id(&coin);
+        let mut p = read_pocket(owner, &id);
+        p.savings += to_tax;
+        p.received += amount;
+        p.paid_out += rest;
+        write_pocket(owner, &id, &p);
+        log_event(
+            "deposit_other_coin",
+            format!(
+                "{{\"owner\":\"{}\",\"from\":\"{}\",\"coin\":\"{}\",\"amount\":\"{}\",\"to_tax\":\"{}\",\"to_owner\":\"{}\"}}",
+                owner, from, id, amount, to_tax, rest
+            ),
+        );
+        if rest > 0 {
+            let _ = send(owner.clone(), rest, coin.clone(), "Steady Pay payment").then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(CALLBACK_GAS)
+                    .on_payout(owner.clone(), U128(rest), Payout::SideForward { coin }),
+            );
+        }
+    }
+
     /// Split a payment into savings and the rest. Salary vaults keep the rest in the pot;
     /// instant vaults forward it to the owner straight away (state is updated before the transfer,
     /// and a failed transfer puts it back in the pot, where `claim_salary` can collect it).
@@ -1226,20 +1443,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "This vault does not accept this token")]
-    fn wrong_token_rejected() {
-        let mut c = setup_token();
-        let _ = ft_pay(&mut c, "fake-usdc.testnet", 1_000 * USD, "bob.testnet");
-    }
-
-    #[test]
-    #[should_panic(expected = "This vault does not accept this token")]
-    fn near_vault_rejects_tokens() {
-        let mut c = setup();
-        let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "alice.testnet");
-    }
-
-    #[test]
     #[should_panic(expected = "Put the vault owner's account ID in msg")]
     fn token_payment_needs_owner_in_msg() {
         let mut c = setup_token();
@@ -1251,14 +1454,6 @@ mod tests {
     fn token_payment_to_missing_vault() {
         let mut c = setup_token();
         let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "nobody.testnet");
-    }
-
-    #[test]
-    #[should_panic(expected = "This vault is paid in usdc.testnet, not NEAR")]
-    fn token_vault_rejects_near() {
-        let mut c = setup_token();
-        ctx("client.testnet", NEAR, T0);
-        c.deposit(acc("bob.testnet"));
     }
 
     #[test]
@@ -1671,5 +1866,131 @@ mod tests {
         ctx("carol.testnet", 0, T0 + YEAR);
         let _ = c.withdraw_tax(None);
         assert_eq!(carol(&c, T0 + YEAR).yield_paid, U128(24 * NEAR));
+    }
+
+    // ---------- other coins: any vault accepts NEAR, USDC, USDT ----------
+
+    fn pocket(c: &SteadyPay, owner: &str, coin: Option<&str>) -> PocketView {
+        ctx("anyone.testnet", 0, T0);
+        c.get_pockets(acc(owner))
+            .into_iter()
+            .find(|p| p.coin.as_ref().map(|a| a.as_str()) == coin)
+            .expect("pocket")
+    }
+
+    #[test]
+    fn near_vault_takes_tokens_into_a_pocket() {
+        let mut c = setup_locked(); // carol: NEAR vault, 30%, locked until T0 + DAY
+        let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "carol.testnet");
+        assert!(get_logs().iter().any(|l| l == "Steady Pay payment"));
+        let p = pocket(&c, "carol.testnet", Some("usdc.testnet"));
+        assert_eq!(p.savings, U128(300 * USD));
+        assert_eq!(p.received, U128(1_000 * USD));
+        assert_eq!(p.paid_out, U128(700 * USD)); // forwarded to carol
+        assert_eq!(p.waiting, U128(0));
+        // the main NEAR books are untouched by the USDC payment
+        assert_eq!(carol(&c, T0).tax_bucket, U128(300 * NEAR));
+    }
+
+    #[test]
+    fn token_vault_takes_near_into_a_pocket() {
+        let mut c = setup_token(); // bob: USDC vault, 30%
+        ctx("client.testnet", 10 * NEAR, T0);
+        c.deposit(acc("bob.testnet"));
+        let p = pocket(&c, "bob.testnet", None);
+        assert_eq!(p.savings, U128(3 * NEAR));
+        assert_eq!(p.paid_out, U128(7 * NEAR));
+        assert_eq!(bob(&c, T0).total_received, U128(0)); // main USDC books untouched
+    }
+
+    #[test]
+    fn token_vault_takes_another_token_into_a_pocket() {
+        let mut c = setup_token();
+        let _ = ft_pay(&mut c, "usdt.testnet", 100 * USD, "bob.testnet");
+        let p = pocket(&c, "bob.testnet", Some("usdt.testnet"));
+        assert_eq!(p.savings, U128(30 * USD));
+        assert_eq!(p.paid_out, U128(70 * USD));
+    }
+
+    #[test]
+    #[should_panic(expected = "Your savings are locked until the unlock date")]
+    fn pocket_savings_stay_locked_until_the_date() {
+        let mut c = setup_locked();
+        let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "carol.testnet");
+        ctx("carol.testnet", 0, T0 + DAY - 1);
+        let _ = c.release_pocket(Some(acc("usdc.testnet")));
+    }
+
+    #[test]
+    fn pocket_savings_release_after_the_date() {
+        let mut c = setup_locked();
+        let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "carol.testnet");
+        ctx("carol.testnet", 0, T0 + DAY);
+        let _ = c.release_pocket(Some(acc("usdc.testnet")));
+        let p = pocket(&c, "carol.testnet", Some("usdc.testnet"));
+        assert_eq!(p.savings, U128(0));
+        assert_eq!(p.paid_out, U128(1_000 * USD));
+    }
+
+    #[test]
+    fn failed_pocket_forward_waits_and_can_be_collected_any_time() {
+        let mut c = setup_locked();
+        let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "carol.testnet");
+        callback_ctx(T0, PromiseResult::Failed);
+        c.on_payout(
+            acc("carol.testnet"),
+            U128(700 * USD),
+            Payout::SideForward {
+                coin: Some(acc("usdc.testnet")),
+            },
+        );
+        let p = pocket(&c, "carol.testnet", Some("usdc.testnet"));
+        assert_eq!(p.waiting, U128(700 * USD));
+        assert_eq!(p.paid_out, U128(0));
+        // savings still locked, but the waiting money can be collected now
+        ctx("carol.testnet", 0, T0 + 1);
+        let _ = c.release_pocket(Some(acc("usdc.testnet")));
+        let p = pocket(&c, "carol.testnet", Some("usdc.testnet"));
+        assert_eq!(p.waiting, U128(0));
+        assert_eq!(p.savings, U128(300 * USD));
+        assert_eq!(p.paid_out, U128(700 * USD));
+    }
+
+    #[test]
+    fn failed_pocket_release_is_rolled_back() {
+        let mut c = setup_locked();
+        let _ = ft_pay(&mut c, "usdc.testnet", 1_000 * USD, "carol.testnet");
+        ctx("carol.testnet", 0, T0 + DAY);
+        let _ = c.release_pocket(Some(acc("usdc.testnet")));
+        callback_ctx(T0 + DAY, PromiseResult::Failed);
+        c.on_payout(
+            acc("carol.testnet"),
+            U128(300 * USD),
+            Payout::SideRelease {
+                coin: Some(acc("usdc.testnet")),
+                savings: U128(300 * USD),
+            },
+        );
+        let p = pocket(&c, "carol.testnet", Some("usdc.testnet"));
+        assert_eq!(p.savings, U128(300 * USD));
+        assert_eq!(p.paid_out, U128(700 * USD));
+    }
+
+    #[test]
+    #[should_panic(expected = "There is nothing to collect in this coin")]
+    fn empty_pocket_release_fails() {
+        let mut c = setup_locked();
+        ctx("carol.testnet", 0, T0 + DAY);
+        let _ = c.release_pocket(Some(acc("usdt.testnet")));
+    }
+
+    #[test]
+    fn pockets_are_listed_once_per_coin() {
+        let mut c = setup_locked();
+        let _ = ft_pay(&mut c, "usdc.testnet", 10 * USD, "carol.testnet");
+        let _ = ft_pay(&mut c, "usdc.testnet", 10 * USD, "carol.testnet");
+        let _ = ft_pay(&mut c, "usdt.testnet", 10 * USD, "carol.testnet");
+        ctx("anyone.testnet", 0, T0);
+        assert_eq!(c.get_pockets(acc("carol.testnet")).len(), 2);
     }
 }

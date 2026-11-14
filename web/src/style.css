@@ -413,7 +413,7 @@ main .wrap { max-width: 1240px; }
   .tabs { margin-left: auto; gap: 0; }
   .tabs a { padding: 6px 8px; letter-spacing: .08em; font-size: 10px; }
   .who .acct { display: none; }
-  .brand span { display: none; }
+  .top:has(.tabs) .brand span { display: none; } /* keep the name on the landing page */
 }
 .dash-head { margin-top: 8px; }
 .ledger li { min-height: 48px; }
@@ -530,3 +530,15 @@ body.on-landing .helper { display: none; }
 .yield-amt { color: #9fd8a9; font-size: 13px; }
 .yield-amt .mono { font-size: 12px; }
 .yield-rate { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+
+/* phones: no scroll hint (it collided with the chapter text), use the real visible height */
+@media (max-width: 600px) {
+  .scroll-hint { display: none; }
+  .scene, .overlay { height: 100dvh; }
+  .chapter { bottom: calc(var(--pad) + 16px); right: var(--pad); }
+  .chapter__title { font-size: clamp(40px, 13vw, 64px); }
+  .chapter__caption { font-size: 14px; }
+}
+
+.pockets { margin-top: 24px; }
+.pockets .act-table th + th, .pockets .act-table td + td { padding-left: 16px; }

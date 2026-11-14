@@ -5,7 +5,7 @@ import {
   CONTRACT_ID, EXPLORER_TX, EXPLORER_ACCOUNT, MIN_CREATE_DEPOSIT,
   nearToYocto, yoctoToNear, toUnits, fromUnits, big, getVault, initWallet, getAccountId, onAccountChange,
   signOut, call, cleanError, rememberTx,
-  TOKENS, isMintable, NEAR_COIN, getCoin, cachedVault, ftBalance, nearBalance, vaultActivity, isRegistered, registerWithToken, mintTestTokens, payWithToken,
+  TOKENS, isMintable, NEAR_COIN, getCoin, cachedVault, getPockets, ftBalance, nearBalance, vaultActivity, isRegistered, registerWithToken, mintTestTokens, payWithToken,
 } from "./near.js";
 import { CHAPTERS, mountStory } from "./story.js";
 import { setAmbient } from "./ambient.js";
@@ -24,7 +24,8 @@ let timer = null;     // dashboard refresh timer
 let toast = null;     // { kind, text, hash }
 let renderSeq = 0;    // drops stale renders when two refreshes overlap
 let unmount = null;   // cleanup for the home page scroll story
-let lastPageKey = null;  // hash of the page currently on screen
+let lastPageKey = null;   // hash of the page currently on screen
+let payCoinChoice = null; // coin picked on the pay page: "" = NEAR, else a token contract
 let walletChecked = false; // true once the wallet selector has loaded and told us who is signed in
 
 /** Did this browser sign in before? (wallet selector keeps the chosen wallet in localStorage) */
@@ -456,6 +457,40 @@ function dashboard(v, coin, reg) {
   </section>`;
 }
 
+/** "Other coins" card: payments the vault got in coins other than its main coin. */
+function pocketsCard(v, pockets) {
+  if (!pockets?.length) return "";
+  const locked = v.savings_unlock_ms != null && v.savings_unlock_ms > Date.now();
+  return `
+  <section class="panel pockets">
+    <div class="block-item">
+      <h2>Other coins</h2>
+      <p>Clients paid you in these too. ${v.tax_percent}% of each payment is locked as savings${locked ? ` until ${fmtWhen(v.savings_unlock_ms)}` : ""}; the rest went straight to your wallet.</p>
+      <table class="act-table">
+        <thead><tr><th>Coin</th><th class="r">Received</th><th class="r">Savings</th><th class="r">Waiting</th><th class="r"></th></tr></thead>
+        <tbody>${pockets.map((p, i) => {
+          const f = (x) => fromUnits(x, p.meta.decimals, p.meta.dp);
+          const can = BigInt(p.waiting) > 0n || (!locked && BigInt(p.savings) > 0n);
+          return `<tr>
+            <td>${esc(p.meta.symbol)}</td>
+            <td class="r mono">${f(p.received)}</td>
+            <td class="r mono">${f(p.savings)}${locked && BigInt(p.savings) > 0n ? ` <span class="demo-tag">locked</span>` : ""}</td>
+            <td class="r mono">${f(p.waiting)}</td>
+            <td class="r"><button class="ghost small" data-pocket="${i}" ${can ? "" : "disabled"}>${BigInt(p.waiting) > 0n && locked ? "Collect" : "Release"}</button></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+function bindPockets(pockets) {
+  app.querySelectorAll("button[data-pocket]").forEach((b) => (b.onclick = (e) => {
+    const p = pockets[Number(b.dataset.pocket)];
+    act(e.currentTarget, `Release ${p.meta.symbol}`, () => call("release_pocket", { coin: p.coin }, { tgas: 50 }));
+  }));
+}
+
 function bindDashboard(v, coin) {
   const units = (x) => toUnits(x, coin.decimals);
   $("#regOwner")?.addEventListener("click", (e) => act(e.currentTarget, `Register with ${coin.symbol}`, () => registerWithToken(coin.token, v.owner)));
@@ -593,11 +628,13 @@ function payPage(owner, v, coin, balance) {
   return `
   <section class="split-page">
     <div class="page-head">
-      <p class="eyebrow">Pay link · ${sym}</p>
+      <p class="eyebrow">Pay link</p>
       <h1>Pay <span class="h1-acct">${esc(owner)}</span></h1>
-      <p>Pay in ${sym} on NEAR testnet. Your payment goes straight into their Steady Pay vault.</p>
+      <p>Pay in NEAR, USDC or USDT on NEAR testnet. Your payment goes straight into their Steady Pay vault.</p>
     </div>
     <form id="payForm" class="panel">
+      <label>Pay with
+        <select name="coin">${[{ id: "", label: "NEAR" }, ...TOKENS].map((t) => `<option value="${esc(t.id)}" ${(coin.token || "") === t.id ? "selected" : ""}>${esc(t.label)}${(v.token || "") === t.id ? " · their main coin" : ""}</option>`).join("")}</select></label>
       <label>Amount (${sym})<input name="amount" inputmode="decimal" required placeholder="10"></label>
       ${coin.token && me ? `<p class="muted small balance-line">Your balance: <span class="mono">${balance == null ? "0" : fromUnits(balance, coin.decimals, coin.dp)} ${sym}</span>
         ${canMint ? `<button type="button" id="mint" class="ghost small">Get 100 test ${sym}</button>` : ""}</p>` : ""}
@@ -612,6 +649,7 @@ function bindPay(owner, v, coin) {
   $("#signin3")?.addEventListener("click", signIn);
   $("#mint")?.addEventListener("click", (e) => act(e.currentTarget, `Get test ${coin.symbol}`, () => mintTestTokens(coin.token, me, toUnits("100", coin.decimals))));
   const f = $("#payForm");
+  f.coin.onchange = () => { payCoinChoice = f.coin.value; refresh(); };
   f.onsubmit = async (ev) => {
     ev.preventDefault();
     let amt;
@@ -629,6 +667,7 @@ async function refresh() {
   document.body.classList.remove("on-landing");
   // Changing page: clear the old one straight away instead of leaving it frozen while data loads.
   const pageKey = location.hash || "#/";
+  if (pageKey !== lastPageKey) payCoinChoice = null; // a new pay link starts on its main coin
   if (pageKey !== lastPageKey && app.innerHTML) {
     app.innerHTML = shell(`<p class="loading">Loading…</p>`);
     bindShell();
@@ -675,9 +714,10 @@ async function refresh() {
     }
     if (page === "pay" && arg) {
       const v = await getVault(arg);
+      const chosen = payCoinChoice ?? (v?.token || "");
       const [coin, balance] = await Promise.all([
-        getCoin(v?.token),
-        v?.token && me ? ftBalance(v.token, me).catch(() => null) : null,
+        getCoin(chosen || null),
+        chosen && me ? ftBalance(chosen, me).catch(() => null) : null,
       ]);
       if (stale()) return;
       setAmbient({ c: 0, x: 2.4, scale: 1.05 });
@@ -709,10 +749,12 @@ async function refresh() {
     }
     const v = await getVault(me);
     clearInterval(timer);
-    const [coin, regOwner, regTax] = await Promise.all([
+    const pocketsP = v ? getPockets(me).then((list) => Promise.all((list || []).map(async (p) => ({ ...p, meta: await getCoin(p.coin) })))).catch(() => []) : [];
+    const [coin, regOwner, regTax, pockets] = await Promise.all([
       getCoin(v?.token),
       v?.token ? isRegistered(v.token, v.owner) : null,
       v?.token && v.tax_wallet !== v.owner ? isRegistered(v.token, v.tax_wallet) : true,
+      pocketsP,
     ]);
     const reg = { owner: regOwner, tax: regTax };
     if (stale()) return;
@@ -720,9 +762,9 @@ async function refresh() {
     setHelperContext({ me, v, coin, fmt: (x) => fromUnits(x, coin.decimals, coin.dp), fmtWhen });
     // dashboard: your vault with its savings ring; setup: the plain sphere
     setAmbient(vault ? { c: 2, x: 2.2, scale: 0.85, y: 1.1 } : { c: 0, x: 2.4, scale: 1.05 });
-    app.innerHTML = shell(vault ? dashboard(vault, coin, reg) : setupPage());
+    app.innerHTML = shell(vault ? dashboard(vault, coin, reg) + pocketsCard(vault, pockets) : setupPage());
     bindShell();
-    vault ? bindDashboard(vault, coin) : bindSetup();
+    vault ? (bindDashboard(vault, coin), bindPockets(pockets)) : bindSetup();
   } catch (e) {
     if (stale()) return;
     app.innerHTML = shell(`<section class="narrow page-head"><h1>Couldn't load</h1><p>${esc(cleanError(e))}</p><p style="margin-top:20px"><button id="retry">Try again</button></p></section>`);

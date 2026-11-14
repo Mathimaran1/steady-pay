@@ -13,7 +13,9 @@ Each vault also picks a **payout mode** at setup:
 - **Instant** (default on the page): savings % locked until the date, the rest is sent straight to the owner's wallet in the same transaction as the payment.
 - **Salary**: the rest waits in the salary pot and the owner claims a fixed salary each period (the original Steady Pay idea: quiet months still pay).
 
-Each vault is paid in one coin, chosen at setup from a dropdown: **NEAR**, **USDC** or **USDT** (any NEP-141 fungible token works; the page offers Ref Finance's testnet `usdc.fakes.testnet` and `usdt.fakes.testnet`).
+**Clients can pay in any coin.** A vault has one main coin (chosen at setup), but its pay link accepts NEAR, USDC or USDT. A payment in another coin is split the same way: the savings % is locked in a separate pocket for that coin until the vault's unlock date, and the rest is sent straight to the owner. If that send fails (owner not registered with the token), it waits in the pocket and can be collected any time (`release_pocket`). No yield on these pockets.
+
+Each vault's main coin is chosen at setup from a dropdown: **NEAR**, **USDC** or **USDT** (any NEP-141 fungible token works; the page offers Ref Finance's testnet `usdc.fakes.testnet` and `usdt.fakes.testnet`).
 
 Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 
@@ -38,7 +40,7 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 ## Status
 
 ### Real and working
-- Smart contract (`contract/`): 61 unit tests passing (`cargo test`); builds to wasm with `cargo near build non-reproducible-wasm`.
+- Smart contract (`contract/`): 67 unit tests passing (`cargo test`); builds to wasm with `cargo near build non-reproducible-wasm`.
 - Deployed on NEAR testnet at `sp11091716-vault.testnet`; full flow verified from the CLI (hashes below).
 - USDC vaults: deployed to the same account on 13 Nov 2026 and verified from the CLI with testnet USDC `usdc.fakes.testnet` (hashes below). Vaults made before that keep working as NEAR vaults.
 - USDT: offered in the setup dropdown; the vault account and demo savings wallet are registered with `usdt.fakes.testnet`. It uses the same contract code path as USDC, but a full USDT run (pay, claim, move savings) has not been verified yet.
@@ -58,6 +60,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the design, method table and demo scr
 | `deposit(owner)` | any client | NEAR vaults: attach the payment |
 | `ft_on_transfer` (via the token's `ft_transfer_call`) | any client | token vaults: `msg` = owner account ID |
 | `claim_salary()` | you | salary vaults: after payday. Instant vaults: collects anything a failed forward left in the vault, any time |
+| `release_pocket(coin?)` | you | other-coin pocket: waiting money any time, locked savings after the unlock date; `coin` = token, omit for NEAR |
+| `get_pockets(owner)` | view | the vault's other-coin pockets |
 | `withdraw_tax(amount?)` | you | only on/after the unlock date; always goes to your tax wallet |
 | `lower_salary(new_salary)` | you | lower only |
 | `get_vault(owner)` | view | |
@@ -166,6 +170,14 @@ Demo yield, run on 14 Nov 2026 (reserve funded with 1 NEAR; new vault `yld.sp110
 | `fund_yield_reserve` 1 NEAR | ok | [5UC8My4F…](https://testnet.nearblocks.io/txns/5UC8My4Fk8jeqUgR3GqPT259y13iCDNj44DhrNDkxW1j) |
 | `withdraw_tax` after the unlock | ok: 0.09 NEAR savings + 0.000000015 NEAR yield in one transfer, log "Steady Pay savings released + demo yield"; reserve down by the same amount | [5YNJyLBF…](https://testnet.nearblocks.io/txns/5YNJyLBFAditV1VVRvMBLbapkzrLpEhnWu96GfREnTZD) |
 
+Other coins, run on 14 Nov 2026 (NEAR vault `slowos1008.testnet`, 30% savings):
+
+| Step | Result | Transaction |
+|---|---|---|
+| client pays 10 USDT to the NEAR vault | ok: 7 USDT sent to the owner, 3 USDT locked in the USDT pocket | [5wZ83u7J…](https://testnet.nearblocks.io/txns/5wZ83u7JAA3x74UiZrS7L6uASTH9g7XACqkud35Fpw47) |
+| client pays 10 USDC to the NEAR vault | ok: 7 USDC sent to the owner (100 → 107), 3 USDC locked; NEAR books unchanged | [B29zKLjw…](https://testnet.nearblocks.io/txns/B29zKLjwgQoufdUMqFLQu96VafS5DFMAiF82ENG9APPr) |
+| client pays 0.1 NEAR to a USDT vault | ok: 0.07 NEAR to the owner, 0.03 locked in its NEAR pocket | [21CHyU5F…](https://testnet.nearblocks.io/txns/21CHyU5Fu8up28BwkYoEZctRTk8BU1qGMThdTR4evsZM) |
+
 On-chain messages: every payout carries a readable message. Token payouts put it in the `ft_transfer` memo; plain NEAR transfers have no memo field, so the contract writes it as a log line on the transaction.
 
 Run it yourself against any deployment: `scripts/walkthrough.sh <contract> <freelancer> <client> <tax_wallet>` (accounts must be in `~/.near-credentials`).
@@ -189,7 +201,7 @@ npm run dev             # or: npm run build -> dist/
 - No AI. The "Steady" character (an animated mascot that floats around the page and opens a chat when clicked) is rule-based: it matches keywords to built-in answers and fills in numbers from your vault; it does not call any AI model. The "suggest a salary" helper is plain arithmetic: the lowest of the monthly incomes you type in, minus your tax percent, computed in your browser.
 - There is no way to close a vault or change the tax wallet / period / tax percent after setup.
 - 0.01 NEAR of the setup deposit is kept by the contract for storage and is not returned.
-- One coin per vault, fixed at setup. A vault can't hold NEAR and USDC at once.
+- Each vault has one main coin, fixed at setup. Payments in other coins skip the salary pot and demo yield: only the savings share is kept (in a per-coin pocket), the rest is forwarded immediately.
 - Token vaults pay out only to accounts registered with the token. If the owner or tax wallet isn't registered, the transfer fails and the money stays in the vault (rolled back); the page shows a "register" step.
 - The contract accepts any NEP-141 token the owner names at setup; it does not check that the token is genuine. The page only offers testnet USDC and USDT (`usdc.fakes.testnet`, `usdt.fakes.testnet`: test tokens with public minting, not Circle's USDC or Tether's USDT).
 - Tax percent is applied with integer math and rounds down by up to 1 yoctoNEAR per payment (in the salary pot's favour); no money is lost.

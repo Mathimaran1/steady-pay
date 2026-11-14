@@ -2,7 +2,7 @@
 // (see scene.js). `mountStory(root)` returns a cleanup function.
 
 export const CHAPTERS = [
-  { title: "Income", caption: "Clients pay whenever they pay. Every payment lands in your vault on NEAR, in NEAR or USDC." },
+  { title: "Income", caption: "Clients pay whenever they pay, in NEAR, USDC or USDT. Every payment lands in your vault on NEAR." },
   { title: "The Split", caption: "The moment it arrives, a share is set aside as savings." },
   { title: "Savings", caption: "Your savings stay locked until the date you choose, earning a demo yield while they wait. Not even you can touch them early." },
   { title: "The Pot", caption: "The rest waits in your salary pot. You can only take your salary." },

@@ -39,7 +39,7 @@ near contract deploy <ACCOUNT>.testnet use-file target/near/steady_pay.wasm \
 
 ## Current status
 
-- Done: contract (`contract/src/lib.rs`, near-sdk 5.30.1) with 61 passing unit tests (NEAR + token vaults, savings date lock, instant/salary payout modes, demo yield); wasm builds with cargo-near 0.23.0 (`target/near/steady_pay.wasm`, ~163 KB). Deployed to `sp11091716-vault.testnet`; NEAR and USDC CLI walkthrough hashes are in README.md.
+- Done: contract (`contract/src/lib.rs`, near-sdk 5.30.1) with 67 passing unit tests (NEAR + token vaults, any-coin payments via per-coin pockets, savings date lock, instant/salary payout modes, demo yield); wasm builds with cargo-near 0.23.0 (`target/near/steady_pay.wasm`, ~163 KB). Deployed to `sp11091716-vault.testnet`; NEAR and USDC CLI walkthrough hashes are in README.md.
 - Written: `web/` (Vite + Wallet Selector 10); `npm run build` passes; pages render live testnet data in headless Chrome. Wallet sign-in works (Meteor). Sending transactions from the page not yet verified by hand.
 - Hosted: https://steady-pay-pi.vercel.app (Vercel project root `web`, env `VITE_CONTRACT_ID`; redeploys on push to `main`).
 - Not done: hand test of pay-link and token flows from the page, demo video, X post, submission.
