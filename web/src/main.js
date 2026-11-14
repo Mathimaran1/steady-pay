@@ -12,6 +12,16 @@ import { setAmbient } from "./ambient.js";
 import { mountHelper, setHelperContext } from "./helper.js";
 
 const app = document.getElementById("app");
+
+// Card spotlight: tell the card under the pointer where the pointer is (CSS draws the glow).
+document.addEventListener("pointermove", (e) => {
+  if (e.pointerType !== "mouse") return;
+  const card = e.target.closest?.(".figures > div, .panel, .notice");
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+  card.style.setProperty("--my", `${e.clientY - r.top}px`);
+}, { passive: true });
 const PERIODS = [
   { ms: 60_000, label: "Every minute (demo)" },
   { ms: 7 * 86_400_000, label: "Every week" },
