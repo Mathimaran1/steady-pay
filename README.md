@@ -27,7 +27,7 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 |---|---|
 | Live page | https://steady-pay-pi.vercel.app (Vercel, NEAR testnet) |
 | Contract (testnet) | [`sp11091716-vault.testnet`](https://testnet.nearblocks.io/address/sp11091716-vault.testnet) |
-| Demo video | TODO |
+| Demo video | [`media/steady-pay-demo.mp4`](media/steady-pay-demo.mp4) (2:24, recorded on the live page on testnet) |
 | X post | TODO |
 
 ## Key rules (enforced on chain)
@@ -49,7 +49,7 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 ### Not done yet
 - USDC/USDT *vaults* (paid in a token as the main coin) have not been run by hand from the page; their contract paths are verified from the CLI (hashes below). USDT payments from the page are not hand-tested.
 - The pay-page fix that registers the payee with the token in the same transaction (commit `0dcbcc6`, see Known limits) builds but has not been hand-tested yet — TODO
-- Demo video link, X post — TODO
+- X post — TODO
 
 ## How it works
 

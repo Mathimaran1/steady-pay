@@ -3,3 +3,6 @@ target
 .env.*
 !.env.example
 node_modules
+
+# demo video working files (recordings, renders); the final cut is media/steady-pay-demo.mp4
+videos/
