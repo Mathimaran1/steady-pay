@@ -296,8 +296,16 @@ export async function mintTestTokens(token, accountId, units) {
 }
 
 /** Pay a token vault: ft_transfer_call to the Steady Pay contract with the owner in msg. */
-export function payWithToken(token, owner, units) {
-  return callActions(token, [{
+export async function payWithToken(token, owner, units) {
+  // The vault forwards the non-savings share of a token payment to the owner straight away. If the owner
+  // isn't registered with the token yet, that forward fails (the money waits safely in the vault, but the
+  // wallet reports the whole payment as failed). So register the owner in the same transaction: one approval.
+  const register = (await isRegistered(token, owner).catch(() => true)) ? [] : [{
+    method: "storage_deposit",
+    args: { account_id: owner, registration_only: true },
+    depositYocto: await storageMin(token),
+  }];
+  return callActions(token, [...register, {
     method: "ft_transfer_call",
     args: { receiver_id: CONTRACT_ID, amount: units, msg: owner },
     depositYocto: "1",
