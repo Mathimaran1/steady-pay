@@ -1,12 +1,73 @@
+<div align="center">
+
 # Steady Pay
 
-**A salary for people who don't have one.** Get paid in lumps. Live on a salary.
+### Get paid in lumps. Live on a salary.
 
-Freelancers get paid unevenly: a big invoice one month, nothing the next. Steady Pay is a NEAR smart contract that holds that lumpy income and pays it back to you as a fixed salary every period. Every client payment is split the moment it arrives: your tax percent goes to a locked tax bucket (it can only ever go to your tax wallet), the rest goes to your salary pot.
+A NEAR vault that turns lumpy freelance income into a fixed salary, with savings set aside on every payment.
 
-On the web page the tax bucket is called **savings**, so the wording fits anyone setting money aside; the contract and CLI keep the `tax` names. Savings stay locked in the vault contract (the one shared Steady Pay vault account that holds every user's money, with separate books per user) until an **unlock date** the owner picks at setup, then go back to the owner.
+[![Live demo](https://img.shields.io/badge/Live_demo-steady--pay--pi.vercel.app-ffb35c?style=for-the-badge)](https://steady-pay-pi.vercel.app)
+[![Demo video](https://img.shields.io/badge/Demo_video-2:24-ede7db?style=for-the-badge)](media/steady-pay-demo.mp4)
+[![Contract](https://img.shields.io/badge/Contract-sp11091716--vault.testnet-111111?style=for-the-badge)](https://testnet.nearblocks.io/address/sp11091716-vault.testnet)
 
-**Demo yield:** savings in NEAR vaults earn a fixed **8% APY demo yield** while locked, paid out with the savings on release. It is paid from a yield reserve the team tops up (`fund_yield_reserve`), so it is a sponsored bonus for the demo, **not** staking or lending, and it stops if the reserve runs out (unpaid yield stays owed). Token (USDC/USDT) vaults earn no yield yet.
+![NEAR testnet](https://img.shields.io/badge/network-NEAR_testnet-00C08B)
+![Tests](https://img.shields.io/badge/contract_tests-67_passing-2ea44f)
+![near-sdk](https://img.shields.io/badge/near--sdk-5.30-555555)
+![Coins](https://img.shields.io/badge/pay_in-NEAR_·_USDC_·_USDT-ffb35c)
+
+<a href="media/steady-pay-demo.mp4"><img src="media/preview.gif" width="760" alt="Animated preview: a client pays 2 NEAR, the vault splits it into savings and a salary pot, then pays a fixed salary every payday. Click for the full demo video."></a>
+
+<sub>▶ Click the preview for the full 2:24 demo (recorded on the live page, NEAR testnet)</sub>
+
+</div>
+
+---
+
+## The idea
+
+Freelancers get paid unevenly: a big invoice one month, nothing the next. Steady Pay is a NEAR smart contract that holds that lumpy income and pays it back to you as a **fixed salary every period**. Every client payment is split the moment it arrives: your savings percent goes to a locked savings bucket, the rest goes to your salary pot.
+
+```mermaid
+flowchart LR
+    C(["Client pays<br/>NEAR · USDC · USDT<br/>any time"]) -->|pay link| V{{"Steady Pay vault<br/>splits on arrival"}}
+    V -->|"savings % (e.g. 30%)"| S[("Savings<br/>locked until your date<br/>+ 8% demo yield")]
+    V -->|the rest| P[("Salary pot")]
+    P -->|"fixed salary<br/>every payday"| Y(["You"])
+    S -->|"after the unlock date,<br/>release any time"| Y
+    V -.->|"instant mode:<br/>rest sent straight away"| Y
+```
+
+> Example: a client pays 1,000 NEAR with 30% tax → 300 NEAR to tax savings, 700 NEAR to the salary pot → with a 100 NEAR salary, you're paid for 7 periods, even if no other client pays.
+
+<table>
+<tr>
+<td width="50%"><img src="media/dashboard.jpg" alt="Steady Pay dashboard: salary pot 1.4 NEAR, savings 0.6 NEAR, next payday Today, salary 0.1 NEAR"></td>
+<td>
+
+**Try it in a minute** (testnet, no sign-up)
+
+1. Open **[steady-pay-pi.vercel.app](https://steady-pay-pi.vercel.app)** and connect a NEAR testnet wallet (Meteor works).
+2. Set up a vault: a salary, payday **every minute** (demo), a savings %, a lock date.
+3. Copy your **pay link** and pay it (any wallet, or your own).
+4. Watch the split, wait for payday, **claim**. Release savings after the date.
+
+</td>
+</tr>
+</table>
+
+
+## Key rules (enforced on chain)
+
+| Rule | What it means |
+|---|---|
+| 🔒 **Savings are locked until a date** | Savings can't be moved by anyone before the unlock date chosen at setup (not even the owner), and then only to the savings wallet: by default the owner's own account. Neither the date nor the wallet can be changed later. |
+| 📉 **Salary can go down, never up** | `lower_salary` rejects any raise. |
+| 🗓️ **No overspending** | You can only take your fixed salary per payday, and only after payday. |
+| 🌙 **Quiet months still pay** | Missed paydays add up; one claim pays all of them, as long as the pot has money. |
+
+
+<details>
+<summary><b>Payout modes, other coins, and wording</b></summary>
 
 Each vault also picks a **payout mode** at setup:
 
@@ -17,9 +78,13 @@ Each vault also picks a **payout mode** at setup:
 
 Each vault's main coin is chosen at setup from a dropdown: **NEAR**, **USDC** or **USDT** (any NEP-141 fungible token works; the page offers Ref Finance's testnet `usdc.fakes.testnet` and `usdt.fakes.testnet`).
 
-Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
+Each vault's main coin is chosen at setup from a dropdown: **NEAR**, **USDC** or **USDT** (any NEP-141 fungible token works; the page offers Ref Finance's testnet `usdc.fakes.testnet` and `usdt.fakes.testnet`).
 
-> Example: a client pays 1,000 NEAR with 30% tax → 300 NEAR to tax savings, 700 NEAR to the salary pot → with a 100 NEAR salary, you're paid for 7 periods, even if no other client pays.
+On the web page the tax bucket is called **savings**, so the wording fits anyone setting money aside; the contract and CLI keep the `tax` names. Savings stay locked in the vault contract (the one shared Steady Pay vault account that holds every user's money, with separate books per user) until an **unlock date** the owner picks at setup, then go back to the owner.
+
+**Demo yield:** savings in NEAR vaults earn a fixed **8% APY demo yield** while locked, paid out with the savings on release. It is paid from a yield reserve the team tops up (`fund_yield_reserve`), so it is a sponsored bonus for the demo, **not** staking or lending, and it stops if the reserve runs out (unpaid yield stays owed). Token (USDC/USDT) vaults earn no yield yet.
+
+</details>
 
 ## Links
 
@@ -30,12 +95,7 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 | Demo video | [`media/steady-pay-demo.mp4`](media/steady-pay-demo.mp4) (2:24, recorded on the live page on testnet) |
 | X post | TODO |
 
-## Key rules (enforced on chain)
-
-- **Savings are locked until a date.** Savings can't be moved by anyone before the unlock date chosen at setup (not even the owner), and then only to the savings wallet: by default the owner's own account. Neither the date nor the wallet can be changed later.
-- **Salary can go down, never up.**
-- **No overspending.** You can only take your fixed salary per payday, and only after payday.
-- **Quiet months still pay.** Missed paydays add up; one claim pays all of them, as long as the pot has money.
+Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 
 ## Status
 
@@ -51,9 +111,141 @@ Built for the NEAR Hackathon (Real-World Money, Autonomous Business tracks).
 - The pay-page fix that registers the payee with the token in the same transaction (commit `0dcbcc6`, see Known limits) builds but has not been hand-tested yet — TODO
 - X post — TODO
 
+## Proof on chain
+
+Every claim in this README links to a real testnet transaction. Click a run to expand it.
+
+<details>
+<summary><b>Transaction hashes from a real run on 9 Nov 2026</b></summary>
+
+Transaction hashes from a real run on 9 Nov 2026 (`scripts/walkthrough.sh`, 0.5 NEAR salary every 60 s, 30% tax, client pays 3 NEAR)
+
+| Step | Result | Transaction |
+|---|---|---|
+| `create_vault` | ok | [4WRCPTb8…](https://testnet.nearblocks.io/txns/4WRCPTb8DbVdAmfsyyDef8CsRMZxWFajNkA31Ema4NST) |
+| client `deposit` 3 NEAR | ok → 0.9 tax, 2.1 pot | [Ab6fKEwo…](https://testnet.nearblocks.io/txns/Ab6fKEwoUshQ4zBDQmmDGgzfUu6Hk4ggX2BE9oU8fQ5N) |
+| `claim_salary` before payday | fails: "It is not payday yet" | [7QRc9fAP…](https://testnet.nearblocks.io/txns/7QRc9fAPrgaKH8kK3dCQqGoZXqBPfEp26TmKed2zRVPi) |
+| `claim_salary` after payday | ok, 0.5 NEAR | [2JjxBXc2…](https://testnet.nearblocks.io/txns/2JjxBXc2m8K9CZzdwSBbXvFxZzBY2ZamyPQgS4LUKDDE) |
+| `lower_salary` to 0.9 (a raise) | fails: "Salary can only go down, never up" | [AjinoZGE…](https://testnet.nearblocks.io/txns/AjinoZGEaFyBtqQ65S1B16VzCVJRAtT73zxvy9sDiUam) |
+| `lower_salary` to 0.4 | ok | [FZ29GskV…](https://testnet.nearblocks.io/txns/FZ29GskVPKoC9w5XFNLmrJGDVXrp3z376tpQBuAPgXQr) |
+| `withdraw_tax` | ok, 0.9 NEAR arrived at the tax wallet | [BcxTF6bu…](https://testnet.nearblocks.io/txns/BcxTF6buqyRoLaBgZswu8HFNTevStMXkQCV4XiqXA9oT) |
+| wait ~2 min, `claim_salary` | ok, 3 missed paydays paid at once (1.2 NEAR) | [4NF28H24…](https://testnet.nearblocks.io/txns/4NF28H24b8MSpTc3SuXmio3pZBMjmEaZ6k4sxrwySZTM) |
+
+</details>
+
+<details>
+<summary><b>USDC run on 13 Nov 2026</b></summary>
+
+USDC run on 13 Nov 2026 (10 USDC salary every 60 s, 30% tax, token `usdc.fakes.testnet`, owner `sp11091716-client.testnet`)
+
+| Step | Result | Transaction |
+|---|---|---|
+| `create_vault` with `"token":"usdc.fakes.testnet"` | ok | [wAdW9RGC…](https://testnet.nearblocks.io/txns/wAdW9RGCygQKe5xLQveVxwVcseVsWRDa249HAqC3ybw) |
+| client `ft_transfer_call` 100 USDC, `msg` = owner | ok → 30 tax, 70 pot | [8cxFcFz1…](https://testnet.nearblocks.io/txns/8cxFcFz13uq8D3ngQVms6aV5ExCLAEF65JPYXxG1REHT) |
+| `ft_transfer_call` 5 USDC to an account with no USDC vault | refunded, payer balance unchanged | [Am5weARb…](https://testnet.nearblocks.io/txns/Am5weARbwsqbTyJwJ4dT2tuxubTCxntTKPYmFVfn21ym) |
+| `claim_salary` after payday | ok, 10 USDC to owner | [2W9VVx1M…](https://testnet.nearblocks.io/txns/2W9VVx1MhruZB7SEaJVEDNyDzVACphkASazYEqFroVwA) |
+| `withdraw_tax` | ok, 30 USDC arrived at the tax wallet | [CKoxcgfp…](https://testnet.nearblocks.io/txns/CKoxcgfpa7xMCAh5msLgLX8tJ4hFogRDLScjpyAjS6a4) |
+
+</details>
+
+<details>
+<summary><b>Savings date lock, run on 14 Nov 2026</b></summary>
+
+Savings date lock, run on 14 Nov 2026 (NEAR vault for `sp11091716-tax.testnet`, no savings wallet given so it defaults to the owner, savings locked for 90 s, client pays 1 NEAR)
+
+| Step | Result | Transaction |
+|---|---|---|
+| `create_vault` with `savings_unlock_ms` | ok | [2zqtWbPU…](https://testnet.nearblocks.io/txns/2zqtWbPUor48iEggQzwjpichsvwE4CVvme5owRdCeKHr) |
+| client `deposit` 1 NEAR | ok → 0.3 savings, 0.7 pot | [4XJqyhXv…](https://testnet.nearblocks.io/txns/4XJqyhXvcTToPPdS1U8TZ3CevrF6vD1SuXfwAWqYtggy) |
+| `withdraw_tax` before the date | fails: "Your savings are locked until the unlock date" | [EtZTWMS5…](https://testnet.nearblocks.io/txns/EtZTWMS5K2T2wX1LtRzeo44pomKeP2AGGe1bSh26zzz6) |
+| `withdraw_tax` after the date | ok, 0.3 NEAR back to the owner, log "Steady Pay savings released" | [ANMo4siZ…](https://testnet.nearblocks.io/txns/ANMo4siZHXV8kKMhNHjAt1KTLpksiM8v3yHbQKodABt2) |
+| `claim_salary` | ok, log "Steady Pay salary · 1 payday" | [CPcQX56e…](https://testnet.nearblocks.io/txns/CPcQX56e4f3wEBCbueFWRxnC8CKjTqJss1ug5wSNbht4) |
+
+</details>
+
+<details>
+<summary><b>Instant mode, run on 14 Nov 2026</b></summary>
+
+Instant mode, run on 14 Nov 2026 (new account `inst.sp11091716-client.testnet`, 30% savings locked for a day, client pays 1 NEAR)
+
+| Step | Result | Transaction |
+|---|---|---|
+| `create_vault` with `"instant":true` | ok | [FSKp9no4…](https://testnet.nearblocks.io/txns/FSKp9no4v2fpxMyMe3oX1yzfoYQSicqTjNo4qYWDRFUL) |
+| client `deposit` 1 NEAR | ok → 0.3 locked as savings, 0.7 sent to the owner in the same transaction (owner balance 0.9898 → 1.6898), log "Steady Pay payment" | [HkTfhzK5…](https://testnet.nearblocks.io/txns/HkTfhzK55ty3Wx3jw6HtR37SXgArxXSfe6tVp6peTfth) |
+
+</details>
+
+<details>
+<summary><b>Demo yield, run on 14 Nov 2026</b></summary>
+
+Demo yield, run on 14 Nov 2026 (reserve funded with 1 NEAR; new vault `yld.sp11091716-client.testnet`, 0.09 NEAR savings locked for 60 s)
+
+| Step | Result | Transaction |
+|---|---|---|
+| `fund_yield_reserve` 1 NEAR | ok | [5UC8My4F…](https://testnet.nearblocks.io/txns/5UC8My4Fk8jeqUgR3GqPT259y13iCDNj44DhrNDkxW1j) |
+| `withdraw_tax` after the unlock | ok: 0.09 NEAR savings + 0.000000015 NEAR yield in one transfer, log "Steady Pay savings released + demo yield"; reserve down by the same amount | [5YNJyLBF…](https://testnet.nearblocks.io/txns/5YNJyLBFAditV1VVRvMBLbapkzrLpEhnWu96GfREnTZD) |
+
+</details>
+
+<details>
+<summary><b>Other coins, run on 14 Nov 2026</b></summary>
+
+Other coins, run on 14 Nov 2026 (NEAR vault `slowos1008.testnet`, 30% savings)
+
+| Step | Result | Transaction |
+|---|---|---|
+| client pays 10 USDT to the NEAR vault | ok: 7 USDT sent to the owner, 3 USDT locked in the USDT pocket | [5wZ83u7J…](https://testnet.nearblocks.io/txns/5wZ83u7JAA3x74UiZrS7L6uASTH9g7XACqkud35Fpw47) |
+| client pays 10 USDC to the NEAR vault | ok: 7 USDC sent to the owner (100 → 107), 3 USDC locked; NEAR books unchanged | [B29zKLjw…](https://testnet.nearblocks.io/txns/B29zKLjwgQoufdUMqFLQu96VafS5DFMAiF82ENG9APPr) |
+| client pays 0.1 NEAR to a USDT vault | ok: 0.07 NEAR to the owner, 0.03 locked in its NEAR pocket | [21CHyU5F…](https://testnet.nearblocks.io/txns/21CHyU5Fu8up28BwkYoEZctRTk8BU1qGMThdTR4evsZM) |
+
+</details>
+
+<details>
+<summary><b>Web page run, by hand from https://steady-pay-pi.vercel.app on 14 Nov 2026</b></summary>
+
+Web page run, by hand from https://steady-pay-pi.vercel.app on 14 Nov 2026 (filmed for the demo video). Freelancer `client_steady.testnet`: NEAR vault, 0.2 NEAR salary every 60 s, 30% savings locked for 5 minutes. Client `slowos1008.testnet`.
+
+| Step | Result | Transaction |
+|---|---|---|
+| `create_vault` from the setup page | ok | [8zYh6iXq…](https://testnet.nearblocks.io/txns/8zYh6iXqar94ydPtyn5Je31AxRWo1nX8fJdqy4D8aNG3) |
+| client pays 2 NEAR through the pay link | ok → 0.6 savings, 1.4 salary pot (7 paydays) | [6XopCqUB…](https://testnet.nearblocks.io/txns/6XopCqUBCZAmD6v2ZtRZA54TF5TBxc3YNyrpWmcxEhov) |
+| client gets 100 test USDC ("Get 100 test USDC" button) | ok | [FM5kCGj1…](https://testnet.nearblocks.io/txns/FM5kCGj1TAh9P5Fywb36tZNNfutj3QgqA3gWDyv4QJiQ) |
+| client pays 1 USDC through the pay link | payment ok: 0.3 USDC locked as savings; forwarding the other 0.7 failed because the freelancer was not registered with USDC, so it stayed in the vault's USDC pocket (log `payout_failed`). The wallet showed this as an error; fixed in the page afterwards (see Known limits) | [CdjCfw3k…](https://testnet.nearblocks.io/txns/CdjCfw3kb6R9CNtiBHbKAZTAZs2qY1iM9sPdEsUMNcFE) |
+| `claim_salary` after several paydays | ok, 7 paydays paid at once (1.4 NEAR) | [DG1nGDNq…](https://testnet.nearblocks.io/txns/DG1nGDNqHtEoDKRk3LaqfPAnaWc6fP8CwKW1SHMzUemj) |
+| `claim_salary` again straight away | fails: "It is not payday yet" | [DCAhEQd8…](https://testnet.nearblocks.io/txns/DCAhEQd8omisMUAmqMpkfcTkCQQUDAbLr1wci5hzbc9) |
+| `lower_salary` to 1 (a raise) | fails: "Salary can only go down, never up" | [5f4KJHQE…](https://testnet.nearblocks.io/txns/5f4KJHQEPQqkZcxfxyWbWU2h7zoTitoMsW1kz355yaA1) |
+| `lower_salary` to 0.1 | ok | [EY8fNdB2…](https://testnet.nearblocks.io/txns/EY8fNdB2vjo4BoZdB8nazYm5pUG5XQEeZze6uxTBsPNP) |
+| `withdraw_tax` ("Release savings") after the unlock | ok: 0.6 NEAR savings + 0.000000745 NEAR demo yield back to the owner | [Bzv34G1U…](https://testnet.nearblocks.io/txns/Bzv34G1UD8a1S916TUDLKTZdHuMiVaPebCsyGTr2o6Qr) |
+
+</details>
+
+<details>
+<summary><b>Web page run 2</b>: the sharp 1080p clips in the demo video</summary>
+
+Same vault (`client_steady.testnet`, by then on a 0.1 NEAR salary), 14 Nov 2026. To film the pay link without a second wallet, the owner paid their own pay link (anyone can). Vault creation in the video is from run 1 (one vault per account).
+
+| Step | Result | Transaction |
+|---|---|---|
+| pays 2 NEAR through the pay link | ok → 0.6 savings, 1.4 salary pot (14 paydays of 0.1) | [93FUv7uF…](https://testnet.nearblocks.io/txns/93FUv7uFbztLu4bCuzfd6JKckhGasHfJKbPbJUQ6UoKz) |
+| "Get 100 test USDC" | ok (also registers the account with USDC) | [26CiaEzc…](https://testnet.nearblocks.io/txns/26CiaEzc4Hr1wDsRGNCrGDkTJYLVT6SWooVpekAELaNK) |
+| pays 1 USDC through the pay link | ok: 0.3 USDC locked as savings, 0.7 USDC forwarded to the owner | [9SXLv5Pe…](https://testnet.nearblocks.io/txns/9SXLv5PeVFBvDpZwcm9xqdHR3HmAjzmN6EFEbZ4ntQWh) |
+| `claim_salary` | ok, 3 paydays paid at once (0.3 NEAR), log "Steady Pay salary · 3 paydays" | [675FtUkD…](https://testnet.nearblocks.io/txns/675FtUkDNg6Z7cQHuQ1U6FNXT7XJdQixE4hFBNgDKDYg) |
+| `lower_salary` to 1 (a raise) | fails: "Salary can only go down, never up" | [9oQmNbdV…](https://testnet.nearblocks.io/txns/9oQmNbdV4qQmAXWvmdtZAkbxH6wko7PtwDRteZ1hckQq) |
+| `lower_salary` to 0.05 | ok | [BifvjhvU…](https://testnet.nearblocks.io/txns/BifvjhvUMMG1kmF6z7iN2weBDzr6CUCkbZG2oSTGSbRA) |
+| `withdraw_tax` ("Release savings") | ok, savings + demo yield back to the owner, log "Steady Pay savings released + demo yield" | [3kmFQkRC…](https://testnet.nearblocks.io/txns/3kmFQkRCQHQ65jjaZfNszSvcuKFnZQBa2GZbgxGoTMPe) |
+
+</details>
+
+On-chain messages: every payout carries a readable message. Token payouts put it in the `ft_transfer` memo; plain NEAR transfers have no memo field, so the contract writes it as a log line on the transaction.
+
+Run it yourself against any deployment: `scripts/walkthrough.sh <contract> <freelancer> <client> <tax_wallet>` (accounts must be in `~/.near-credentials`).
+
 ## How it works
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the design, method table and demo script.
+
+<details>
+<summary><b>Contract methods</b></summary>
 
 | Method | Who | What |
 |---|---|---|
@@ -69,9 +261,12 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the design, method table and demo scr
 
 Amounts are strings in the vault coin's smallest unit: yoctoNEAR (1 NEAR = 10^24) or the token's base unit (USDC has 6 decimals, so 1 USDC = 1000000).
 
+</details>
+
 ## Run it
 
-### Contract
+<details>
+<summary><b>Contract: test, build, deploy</b></summary>
 
 ```bash
 rustup target add wasm32-unknown-unknown
@@ -88,7 +283,10 @@ near contract deploy <ACCOUNT>.testnet use-file target/near/steady_pay.wasm \
   network-config testnet sign-with-keychain send
 ```
 
-### CLI walkthrough
+</details>
+
+<details>
+<summary><b>CLI walkthrough</b> (create, pay, claim, release from the terminal)</summary>
 
 ```bash
 C=<CONTRACT>.testnet; ME=<FREELANCER>.testnet; CLIENT=<CLIENT>.testnet; TAX=<TAX_WALLET>.testnet
@@ -114,29 +312,6 @@ near contract call-function as-transaction $C withdraw_tax json-args '{}' \
   prepaid-gas '50 Tgas' attached-deposit '0 NEAR' sign-as $ME network-config testnet sign-with-keychain send
 ```
 
-Transaction hashes from a real run on 9 Nov 2026 (`scripts/walkthrough.sh`, 0.5 NEAR salary every 60 s, 30% tax, client pays 3 NEAR):
-
-| Step | Result | Transaction |
-|---|---|---|
-| `create_vault` | ok | [4WRCPTb8…](https://testnet.nearblocks.io/txns/4WRCPTb8DbVdAmfsyyDef8CsRMZxWFajNkA31Ema4NST) |
-| client `deposit` 3 NEAR | ok → 0.9 tax, 2.1 pot | [Ab6fKEwo…](https://testnet.nearblocks.io/txns/Ab6fKEwoUshQ4zBDQmmDGgzfUu6Hk4ggX2BE9oU8fQ5N) |
-| `claim_salary` before payday | fails: "It is not payday yet" | [7QRc9fAP…](https://testnet.nearblocks.io/txns/7QRc9fAPrgaKH8kK3dCQqGoZXqBPfEp26TmKed2zRVPi) |
-| `claim_salary` after payday | ok, 0.5 NEAR | [2JjxBXc2…](https://testnet.nearblocks.io/txns/2JjxBXc2m8K9CZzdwSBbXvFxZzBY2ZamyPQgS4LUKDDE) |
-| `lower_salary` to 0.9 (a raise) | fails: "Salary can only go down, never up" | [AjinoZGE…](https://testnet.nearblocks.io/txns/AjinoZGEaFyBtqQ65S1B16VzCVJRAtT73zxvy9sDiUam) |
-| `lower_salary` to 0.4 | ok | [FZ29GskV…](https://testnet.nearblocks.io/txns/FZ29GskVPKoC9w5XFNLmrJGDVXrp3z376tpQBuAPgXQr) |
-| `withdraw_tax` | ok, 0.9 NEAR arrived at the tax wallet | [BcxTF6bu…](https://testnet.nearblocks.io/txns/BcxTF6buqyRoLaBgZswu8HFNTevStMXkQCV4XiqXA9oT) |
-| wait ~2 min, `claim_salary` | ok, 3 missed paydays paid at once (1.2 NEAR) | [4NF28H24…](https://testnet.nearblocks.io/txns/4NF28H24b8MSpTc3SuXmio3pZBMjmEaZ6k4sxrwySZTM) |
-
-USDC run on 13 Nov 2026 (10 USDC salary every 60 s, 30% tax, token `usdc.fakes.testnet`, owner `sp11091716-client.testnet`):
-
-| Step | Result | Transaction |
-|---|---|---|
-| `create_vault` with `"token":"usdc.fakes.testnet"` | ok | [wAdW9RGC…](https://testnet.nearblocks.io/txns/wAdW9RGCygQKe5xLQveVxwVcseVsWRDa249HAqC3ybw) |
-| client `ft_transfer_call` 100 USDC, `msg` = owner | ok → 30 tax, 70 pot | [8cxFcFz1…](https://testnet.nearblocks.io/txns/8cxFcFz13uq8D3ngQVms6aV5ExCLAEF65JPYXxG1REHT) |
-| `ft_transfer_call` 5 USDC to an account with no USDC vault | refunded, payer balance unchanged | [Am5weARb…](https://testnet.nearblocks.io/txns/Am5weARbwsqbTyJwJ4dT2tuxubTCxntTKPYmFVfn21ym) |
-| `claim_salary` after payday | ok, 10 USDC to owner | [2W9VVx1M…](https://testnet.nearblocks.io/txns/2W9VVx1MhruZB7SEaJVEDNyDzVACphkASazYEqFroVwA) |
-| `withdraw_tax` | ok, 30 USDC arrived at the tax wallet | [CKoxcgfp…](https://testnet.nearblocks.io/txns/CKoxcgfpa7xMCAh5msLgLX8tJ4hFogRDLScjpyAjS6a4) |
-
 Pay a USDC vault from the CLI:
 
 ```bash
@@ -147,57 +322,12 @@ near contract call-function as-transaction usdc.fakes.testnet ft_transfer_call \
 
 The contract account, the owner and the tax wallet must each be registered with the token (`storage_deposit`) to hold it. The web page offers buttons for this. `usdc.fakes.testnet` has a public `mint`, so the page can also hand out test USDC.
 
-Savings date lock, run on 14 Nov 2026 (NEAR vault for `sp11091716-tax.testnet`, no savings wallet given so it defaults to the owner, savings locked for 90 s, client pays 1 NEAR):
-
-| Step | Result | Transaction |
-|---|---|---|
-| `create_vault` with `savings_unlock_ms` | ok | [2zqtWbPU…](https://testnet.nearblocks.io/txns/2zqtWbPUor48iEggQzwjpichsvwE4CVvme5owRdCeKHr) |
-| client `deposit` 1 NEAR | ok → 0.3 savings, 0.7 pot | [4XJqyhXv…](https://testnet.nearblocks.io/txns/4XJqyhXvcTToPPdS1U8TZ3CevrF6vD1SuXfwAWqYtggy) |
-| `withdraw_tax` before the date | fails: "Your savings are locked until the unlock date" | [EtZTWMS5…](https://testnet.nearblocks.io/txns/EtZTWMS5K2T2wX1LtRzeo44pomKeP2AGGe1bSh26zzz6) |
-| `withdraw_tax` after the date | ok, 0.3 NEAR back to the owner, log "Steady Pay savings released" | [ANMo4siZ…](https://testnet.nearblocks.io/txns/ANMo4siZHXV8kKMhNHjAt1KTLpksiM8v3yHbQKodABt2) |
-| `claim_salary` | ok, log "Steady Pay salary · 1 payday" | [CPcQX56e…](https://testnet.nearblocks.io/txns/CPcQX56e4f3wEBCbueFWRxnC8CKjTqJss1ug5wSNbht4) |
-
-Instant mode, run on 14 Nov 2026 (new account `inst.sp11091716-client.testnet`, 30% savings locked for a day, client pays 1 NEAR):
-
-| Step | Result | Transaction |
-|---|---|---|
-| `create_vault` with `"instant":true` | ok | [FSKp9no4…](https://testnet.nearblocks.io/txns/FSKp9no4v2fpxMyMe3oX1yzfoYQSicqTjNo4qYWDRFUL) |
-| client `deposit` 1 NEAR | ok → 0.3 locked as savings, 0.7 sent to the owner in the same transaction (owner balance 0.9898 → 1.6898), log "Steady Pay payment" | [HkTfhzK5…](https://testnet.nearblocks.io/txns/HkTfhzK55ty3Wx3jw6HtR37SXgArxXSfe6tVp6peTfth) |
-
-Demo yield, run on 14 Nov 2026 (reserve funded with 1 NEAR; new vault `yld.sp11091716-client.testnet`, 0.09 NEAR savings locked for 60 s):
-
-| Step | Result | Transaction |
-|---|---|---|
-| `fund_yield_reserve` 1 NEAR | ok | [5UC8My4F…](https://testnet.nearblocks.io/txns/5UC8My4Fk8jeqUgR3GqPT259y13iCDNj44DhrNDkxW1j) |
-| `withdraw_tax` after the unlock | ok: 0.09 NEAR savings + 0.000000015 NEAR yield in one transfer, log "Steady Pay savings released + demo yield"; reserve down by the same amount | [5YNJyLBF…](https://testnet.nearblocks.io/txns/5YNJyLBFAditV1VVRvMBLbapkzrLpEhnWu96GfREnTZD) |
-
-Other coins, run on 14 Nov 2026 (NEAR vault `slowos1008.testnet`, 30% savings):
-
-| Step | Result | Transaction |
-|---|---|---|
-| client pays 10 USDT to the NEAR vault | ok: 7 USDT sent to the owner, 3 USDT locked in the USDT pocket | [5wZ83u7J…](https://testnet.nearblocks.io/txns/5wZ83u7JAA3x74UiZrS7L6uASTH9g7XACqkud35Fpw47) |
-| client pays 10 USDC to the NEAR vault | ok: 7 USDC sent to the owner (100 → 107), 3 USDC locked; NEAR books unchanged | [B29zKLjw…](https://testnet.nearblocks.io/txns/B29zKLjwgQoufdUMqFLQu96VafS5DFMAiF82ENG9APPr) |
-| client pays 0.1 NEAR to a USDT vault | ok: 0.07 NEAR to the owner, 0.03 locked in its NEAR pocket | [21CHyU5F…](https://testnet.nearblocks.io/txns/21CHyU5Fu8up28BwkYoEZctRTk8BU1qGMThdTR4evsZM) |
-
-Web page run, by hand from https://steady-pay-pi.vercel.app on 14 Nov 2026 (filmed for the demo video). Freelancer `client_steady.testnet`: NEAR vault, 0.2 NEAR salary every 60 s, 30% savings locked for 5 minutes. Client `slowos1008.testnet`.
-
-| Step | Result | Transaction |
-|---|---|---|
-| `create_vault` from the setup page | ok | [8zYh6iXq…](https://testnet.nearblocks.io/txns/8zYh6iXqar94ydPtyn5Je31AxRWo1nX8fJdqy4D8aNG3) |
-| client pays 2 NEAR through the pay link | ok → 0.6 savings, 1.4 salary pot (7 paydays) | [6XopCqUB…](https://testnet.nearblocks.io/txns/6XopCqUBCZAmD6v2ZtRZA54TF5TBxc3YNyrpWmcxEhov) |
-| client gets 100 test USDC ("Get 100 test USDC" button) | ok | [FM5kCGj1…](https://testnet.nearblocks.io/txns/FM5kCGj1TAh9P5Fywb36tZNNfutj3QgqA3gWDyv4QJiQ) |
-| client pays 1 USDC through the pay link | payment ok: 0.3 USDC locked as savings; forwarding the other 0.7 failed because the freelancer was not registered with USDC, so it stayed in the vault's USDC pocket (log `payout_failed`). The wallet showed this as an error; fixed in the page afterwards (see Known limits) | [CdjCfw3k…](https://testnet.nearblocks.io/txns/CdjCfw3kb6R9CNtiBHbKAZTAZs2qY1iM9sPdEsUMNcFE) |
-| `claim_salary` after several paydays | ok, 7 paydays paid at once (1.4 NEAR) | [DG1nGDNq…](https://testnet.nearblocks.io/txns/DG1nGDNqHtEoDKRk3LaqfPAnaWc6fP8CwKW1SHMzUemj) |
-| `claim_salary` again straight away | fails: "It is not payday yet" | [DCAhEQd8…](https://testnet.nearblocks.io/txns/DCAhEQd8omisMUAmqMpkfcTkCQQUDAbLr1wci5hzbc9) |
-| `lower_salary` to 1 (a raise) | fails: "Salary can only go down, never up" | [5f4KJHQE…](https://testnet.nearblocks.io/txns/5f4KJHQEPQqkZcxfxyWbWU2h7zoTitoMsW1kz355yaA1) |
-| `lower_salary` to 0.1 | ok | [EY8fNdB2…](https://testnet.nearblocks.io/txns/EY8fNdB2vjo4BoZdB8nazYm5pUG5XQEeZze6uxTBsPNP) |
-| `withdraw_tax` ("Release savings") after the unlock | ok: 0.6 NEAR savings + 0.000000745 NEAR demo yield back to the owner | [Bzv34G1U…](https://testnet.nearblocks.io/txns/Bzv34G1UD8a1S916TUDLKTZdHuMiVaPebCsyGTr2o6Qr) |
-
-On-chain messages: every payout carries a readable message. Token payouts put it in the `ft_transfer` memo; plain NEAR transfers have no memo field, so the contract writes it as a log line on the transaction.
-
 Run it yourself against any deployment: `scripts/walkthrough.sh <contract> <freelancer> <client> <tax_wallet>` (accounts must be in `~/.near-credentials`).
 
-### Web page
+</details>
+
+<details>
+<summary><b>Web page: run locally</b></summary>
 
 ```bash
 cd web
@@ -205,6 +335,8 @@ cp .env.example .env    # set VITE_CONTRACT_ID (optional: VITE_USDC_ID)
 npm install
 npm run dev             # or: npm run build -> dist/
 ```
+
+</details>
 
 ## Known limits
 
